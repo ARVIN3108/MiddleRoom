@@ -1,60 +1,71 @@
 @echo off
-REM ======================================================================
-REM Batch Script: Delete User 'TKA' and Log Out (Self-Elevating)
-REM Description: Checks for Admin rights, deletes the specified user,
-REM              and then forces a log out.
-REM ======================================================================
+REM ====================================================================
+REM BATCH SCRIPT: User Creation and Administrator Elevation
+REM This script creates a new local user 'TKA' and adds them to the
+REM local 'Administrators' group.
+REM
+REM WARNING: Creating new admin accounts should only be done for legitimate
+REM system administration purposes and requires extreme caution.
+REM Please change the placeholder password immediately after execution.
+REM ====================================================================
 
-:: ----------------------------------------------------------------------
-:: 1. CHECK FOR ADMINISTRATOR PRIVILEGES (Self-Elevation)
-:: This section checks if the script is running with elevated rights.
-:: If not, it uses VBScript to re-launch itself with "Run as administrator".
-:: ----------------------------------------------------------------------
-:check_admin
-NET SESSION >NUL 2>&1
-IF %ERRORLEVEL% NEQ 0 (
-    ECHO --------------------------------------------------------
-    ECHO ADMINISTRATOR RIGHTS REQUIRED!
-    ECHO The script will now attempt to re-launch itself with elevated permissions.
-    ECHO Please click 'Yes' on the User Account Control (UAC) prompt.
-    ECHO --------------------------------------------------------
+setlocal
 
-    REM Create a temporary VBScript file to perform the elevation
-    SET "script=%~dpnx0"
-    ECHO Set UAC = CreateObject^("Shell.Application"^)>"%temp%\getadmin.vbs"
-    ECHO UAC.ShellExecute "%script%", "", "", "runas", 1 >> "%temp%\getadmin.vbs"
-    "%temp%\getadmin.vbs"
-    EXIT /B
-) ELSE (
-    GOTO :main
+:: --- 1. ELEVATION CHECK (MANDATORY) --------------------------------
+:: Check if the script is running with administrative privileges.
+:: The 'net session' command will only succeed (ErrorLevel 0) if elevated.
+net session >nul 2>&1
+
+if %errorlevel% equ 0 (
+    goto :Admin_Commands
+) else (
+    goto :Elevate_Script
 )
 
+:: --- 2. SELF-ELEVATION ROUTINE --------------------------------------
+:Elevate_Script
+    echo.
+    echo -----------------------------------------------------------------
+    echo WARNING: Administrative privileges are required.
+    echo Requesting User Account Control (UAC) prompt to relaunch script...
+    echo -----------------------------------------------------------------
+    echo.
 
-:: ----------------------------------------------------------------------
-:: 2. MAIN LOGIC: CONFIRMATION, DELETION, AND LOG OUT
-:: This section executes only after the script has admin privileges.
-:: ----------------------------------------------------------------------
-:main
-CLS
-ECHO ########################################################
-ECHO #        USER DELETION AND LOGOUT UTILITY              #
-ECHO ########################################################
-ECHO.
-ECHO [STEP 1/2] Attempting to delete user: TKA...
-NET USER TKA /DELETE
+    :: This small PowerShell snippet executes the current batch file (%~fs0)
+    :: with the 'RunAs' verb, forcing the UAC prompt.
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process '%~fs0' -Verb RunAs"
 
-IF %ERRORLEVEL% EQU 0 (
-    ECHO SUCCESS: User TKA was deleted (or did not exist).
-) ELSE (
-    ECHO WARNING: Failed to delete user TKA. Error code: %ERRORLEVEL%.
-    ECHO The account might already be deleted or an error occurred. Continuing to log out.
-)
+    endlocal
+    exit /b
 
-ECHO.
-ECHO [STEP 2/2] Deletion complete. Logging out current session...
 
-:: Logout command
-SHUTDOWN /L
+:: --- 3. ADMINISTRATIVE COMMANDS -------------------------------------
+:Admin_Commands
+    echo.
+    echo Running with Administrator privileges...
 
-:end
-EXIT /B
+    set "USERNAME=TKA"
+
+    echo -----------------------------------------------------------------
+    echo 1. Creating user '%USERNAME%'...
+    net user "%USERNAME%" /delete
+
+    if not errorlevel 0 (
+        echo ERROR: Failed to add user '%USERNAME%' to '%ADMIN_GROUP%'.
+    ) else (
+        echo SUCCESS: User '%USERNAME%' has been created and is now a local administrator.
+        echo.
+        echo ACTION REQUIRED: Please change the temporary password immediately.
+    )
+
+    echo -----------------------------------------------------------------
+    REM --- NEW LOGOUT STEPS ADDED BELOW ---
+    echo 4. Logging off current user...
+    
+    :: /l = Log off the current user
+    :: /f = Force running applications to close without warning
+    shutdown /l /f
+
+    endlocal
+    REM No pause needed, as shutdown /l is immediate.
+    exit /b
